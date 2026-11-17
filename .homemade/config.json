@@ -1,0 +1,74 @@
+{
+  "$schema": "https://homemade.dev/schemas/latest/config.json",
+  "setup": [
+    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends php-cli php-curl php-mbstring php-xml php-intl php-xsl php-gd php-sqlite3 php-mysql php-zip php-bcmath"
+  ],
+  "warmup": [
+    "mkdir -p \"$MEDIA_PATH\" \"$(dirname \"$DB_DATABASE\")\" && { test -f \"$DB_DATABASE\" || touch \"$DB_DATABASE\"; }",
+    "composer install --no-interaction",
+    "npx --yes corepack pnpm install --frozen-lockfile",
+    "bash .homemade/php.sh artisan koel:init --no-assets --no-scheduler --no-interaction"
+  ],
+  "install": [
+    "mkdir -p \"$MEDIA_PATH\" \"$(dirname \"$DB_DATABASE\")\" && { test -f \"$DB_DATABASE\" || touch \"$DB_DATABASE\"; }",
+    "composer install --no-interaction",
+    "npx --yes corepack pnpm install --frozen-lockfile",
+    "bash .homemade/php.sh artisan koel:init --no-assets --no-scheduler --no-interaction"
+  ],
+  "services": {
+    "app": {
+      "cmd": "exec bash .homemade/php.sh artisan serve --host=0.0.0.0 --port=\"$PORT\"",
+      "port": 8000,
+      "url": true,
+      "healthcheck": {
+        "path": "/"
+      },
+      "displayName": "Koel",
+      "order": 0
+    },
+    "web": {
+      "cmd": "exec npx --yes corepack pnpm exec vp dev --config .homemade/vite.config.ts --host 0.0.0.0 --port \"$PORT\" --strictPort",
+      "port": 5173,
+      "url": true,
+      "healthcheck": {
+        "path": "/@vite/client"
+      },
+      "displayName": "Vite HMR",
+      "order": 1
+    }
+  },
+  "env_schema": [
+    {
+      "key": "APP_ENV",
+      "warmup": true
+    },
+    {
+      "key": "APP_KEY",
+      "warmup": true
+    },
+    {
+      "key": "APP_URL",
+      "warmup": true
+    },
+    {
+      "key": "DB_CONNECTION",
+      "warmup": true
+    },
+    {
+      "key": "DB_DATABASE",
+      "warmup": true
+    },
+    {
+      "key": "MEDIA_PATH",
+      "warmup": true
+    },
+    {
+      "key": "MAIL_MAILER",
+      "warmup": true
+    },
+    {
+      "key": "VITE_DEV_SERVER_URL",
+      "warmup": true
+    }
+  ]
+}
