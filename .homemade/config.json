@@ -1,23 +1,21 @@
 {
   "$schema": "https://homemade.dev/schemas/latest/config.json",
   "setup": [
-    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends php-cli php-curl php-mbstring php-xml php-intl php-xsl php-gd php-sqlite3 php-mysql php-zip php-bcmath"
+    "bash -c 'set -euo pipefail\nruntime=/opt/koel-php\nmkdir -p \"$runtime/build/lists/partial\" \"$runtime/build/archives/partial\"\napt_options=(-o \"Dir::State::lists=$runtime/build/lists\" -o Dir::State::status=/dev/null -o \"Dir::Cache::archives=$runtime/build/archives\" -o APT::Sandbox::User=root)\napt-get \"${apt_options[@]}\" update\nDEBIAN_FRONTEND=noninteractive apt-get \"${apt_options[@]}\" install -y --download-only --no-install-recommends php8.5-cli php8.5-common php8.5-curl php8.5-mbstring php8.5-xml php8.5-intl php8.5-xsl php8.5-gd php8.5-sqlite3 php8.5-mysql php8.5-zip php8.5-bcmath\nfor package in \"$runtime\"/build/archives/*.deb; do dpkg-deb --extract \"$package\" \"$runtime\"; done\nrm -rf \"$runtime/build\"'"
   ],
   "warmup": [
-    "mkdir -p \"$MEDIA_PATH\" \"$(dirname \"$DB_DATABASE\")\" && { test -f \"$DB_DATABASE\" || touch \"$DB_DATABASE\"; }",
-    "composer install --no-interaction",
-    "npx --yes corepack pnpm install --frozen-lockfile",
-    "bash .homemade/php.sh artisan koel:init --no-assets --no-scheduler --no-interaction"
+    "python3 -c 'import json, subprocess; [subprocess.run(command, shell=True, executable=\"/bin/bash\", check=True) for command in json.load(open(\".homemade/config.json\"))[\"install\"]]'"
   ],
   "install": [
+    "mkdir -p storage/app/homemade && printf %s '#!/usr/bin/env bash\nset -euo pipefail\nruntime=/opt/koel-php\nextension_dir=$(dirname \"$(find \"$runtime/usr/lib/php\" -name intl.so -print -quit)\")\noptions=(-n -d \"extension_dir=$extension_dir\" -d memory_limit=512M -d display_errors=0 -d log_errors=1)\nif [[ -n \"${APP_KEY:-}\" && \"$APP_KEY\" != base64:* && ${#APP_KEY} -ne 32 ]]; then\n  APP_KEY=$(printf '\"'\"'%s'\"'\"' \"$APP_KEY\" | sha256sum | cut -c 1-32)\n  export APP_KEY\nfi\nfor extension in pdo mysqlnd bcmath calendar ctype curl dom mbstring exif fileinfo ftp gd gettext iconv intl mysqli pdo_mysql pdo_sqlite phar posix shmop simplexml sockets sqlite3 sysvmsg sysvsem sysvshm tokenizer xml xmlreader xmlwriter xsl zip; do\n  if [[ -f \"$extension_dir/$extension.so\" ]]; then options+=(-d \"extension=$extension\"); fi\ndone\nexec \"$runtime/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\" --library-path \"$runtime/usr/lib/x86_64-linux-gnu\" \"$runtime/usr/bin/php8.5\" \"${options[@]}\" \"$@\"\n' > storage/app/homemade/php.sh && printf %s 'import { defineConfig, mergeConfig } from \"vite-plus\"\nimport config from \"../../../vite.config\"\nconst publicUrl = new URL(process.env.VITE_DEV_SERVER_URL!)\nexport default mergeConfig(config, defineConfig({ server: { host: \"0.0.0.0\", origin: publicUrl.origin, allowedHosts: [publicUrl.hostname], cors: { origin: process.env.APP_URL }, hmr: { protocol: \"wss\", host: publicUrl.hostname, clientPort: 443 } } }))\n' > storage/app/homemade/vite.config.ts",
     "mkdir -p \"$MEDIA_PATH\" \"$(dirname \"$DB_DATABASE\")\" && { test -f \"$DB_DATABASE\" || touch \"$DB_DATABASE\"; }",
-    "composer install --no-interaction",
+    "composer --version && bash storage/app/homemade/php.sh \"$(find \"$HOME/.local/share/homemade/tools/composer\" -name composer.phar -print -quit)\" install --no-interaction --no-scripts && bash storage/app/homemade/php.sh artisan package:discover --no-interaction",
     "npx --yes corepack pnpm install --frozen-lockfile",
-    "bash .homemade/php.sh artisan koel:init --no-assets --no-scheduler --no-interaction"
+    "bash storage/app/homemade/php.sh artisan koel:init --no-assets --no-scheduler --no-interaction"
   ],
   "services": {
     "app": {
-      "cmd": "exec bash .homemade/php.sh artisan serve --host=0.0.0.0 --port=\"$PORT\"",
+      "cmd": "timeout 120 sh -c 'until curl -fsS --max-time 2 http://127.0.0.1:5173/@vite/client >/dev/null; do sleep 1; done' && exec bash storage/app/homemade/php.sh -S \"0.0.0.0:$PORT\" -t public server.php",
       "port": 8000,
       "url": true,
       "healthcheck": {
@@ -27,7 +25,7 @@
       "order": 0
     },
     "web": {
-      "cmd": "exec npx --yes corepack pnpm exec vp dev --config .homemade/vite.config.ts --host 0.0.0.0 --port \"$PORT\" --strictPort",
+      "cmd": "exec npx --yes corepack pnpm exec vp dev --config storage/app/homemade/vite.config.ts --host 0.0.0.0 --port \"$PORT\" --strictPort",
       "port": 5173,
       "url": true,
       "healthcheck": {
