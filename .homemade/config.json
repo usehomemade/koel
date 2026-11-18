@@ -1,8 +1,7 @@
 {
   "$schema": "https://homemade.dev/schemas/latest/config.json",
   "setup": [
-    "apt-get update",
-    "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends php-cli php-curl php-mbstring php-xml php-gd php-zip php-intl php-sqlite3 php-bcmath"
+    "bash -euo pipefail -c 'runtime=/opt/koel-php; mkdir -p \"$runtime/apt-state/lists/partial\" \"$runtime/apt-cache/archives/partial\"; apt_options=(-o \"Dir::State=$runtime/apt-state\" -o Dir::State::status=/var/lib/dpkg/status -o \"Dir::Cache=$runtime/apt-cache\"); apt-get \"${apt_options[@]}\" update; DEBIAN_FRONTEND=noninteractive apt-get \"${apt_options[@]}\" install -y --download-only --no-install-recommends php-cli php-curl php-mbstring php-xml php-gd php-zip php-intl php-sqlite3 php-bcmath; for archive in \"$runtime\"/apt-cache/archives/*.deb; do dpkg-deb -x \"$archive\" \"$runtime\"; done; extension_directory=$(find \"$runtime/usr/lib/php\" -name pdo.so -printf \"%h\\n\" -quit); printf \"extension_dir=%s\\n\" \"$extension_directory\" > \"$runtime/php.ini\"; for extension in pdo xml dom simplexml xmlreader xmlwriter xsl curl mbstring gd zip intl sqlite3 pdo_sqlite bcmath ctype exif fileinfo iconv tokenizer phar posix sockets; do printf \"extension=%s\\n\" \"$extension\" >> \"$runtime/php.ini\"; done; php_binary=$(find \"$runtime/usr/bin\" -maxdepth 1 -name \"php[0-9]*\" -type f -print -quit); printf \"#!/bin/sh\\nexport LD_LIBRARY_PATH=/opt/koel-php/usr/lib/x86_64-linux-gnu\\nexport PHPRC=/opt/koel-php/php.ini\\nexec %s \\\"\\$@\\\"\\n\" \"$php_binary\" > /usr/local/bin/php; chmod +x /usr/local/bin/php; php -v; php -m'"
   ],
   "warmup": [
     "mkdir -p \"$(dirname \"$DB_DATABASE\")\" \"$MEDIA_PATH\" && touch \"$DB_DATABASE\"",
@@ -18,7 +17,7 @@
   ],
   "services": {
     "app": {
-      "cmd": "unset APP_KEY; exec php artisan serve --host=0.0.0.0 --port=\"$PORT\"",
+      "cmd": "unset APP_KEY; exec php -S \"0.0.0.0:$PORT\" -t public server.php",
       "port": 8000,
       "url": true,
       "healthcheck": {
